@@ -1,0 +1,35 @@
+cc_library(
+  name = "leveldb_headers",
+  hdrs = glob(['include/**/*.h']),
+  strip_include_prefix = "include",
+)
+
+cc_library(
+  name = "leveldb",
+  srcs = glob(
+    include=['**/*.h', '**/*.cc'],
+    exclude=[
+        '**/*_test.cc',
+        '**/*_bench.cc',
+        'doc/**',
+        'db/leveldbutil.cc',
+    ],
+  ),
+  deps = [
+    ':leveldb_headers',
+  ],
+  defines = [
+    'LEVELDB_PLATFORM_POSIX',
+    'LEVELDB_IS_BIG_ENDIAN=0',
+  ],
+  linkopts = ['-lpthread'],
+  visibility = ['//visibility:public'],
+)
+
+cc_binary(
+  name = "leveldbutil",
+  srcs = ['db/leveldbutil.cc'],
+  deps = [
+    ':leveldb',
+  ],
+)

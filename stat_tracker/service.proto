@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+package stat_tracker;
+
+message Stat {
+  string display_name = 2;
+}
+
+message Event {
+  string stat_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Duration duration = 3;
+  google.protobuf.Any value = 4;
+}
+
+message DefineStatRequest {
+  string user_id = 1;
+  Stat stat = 2;
+}
+
+message DefineStatResponse {
+  string new_stat_id = 1;
+}
+
+message DeleteStatRequest {
+  string user_id = 1;
+  string stat_id = 2;
+}
+
+message DeleteEventRequest {
+  string user_id = 1;
+  string stat_id = 2;
+  string event_id = 3;
+}
+
+message ReadStatsRequest {
+  string user_id = 1;
+}
+
+message ReadStatsResponse {
+  map<string, Stat> stats = 1;
+}
+
+message ReadEventsRequest {
+  string user_id = 1;
+  string stat_id = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Duration duration = 4;
+}
+
+message ReadEventsResponse {
+  map<string, Event> events = 1;
+}
+
+message RecordEventRequest {
+  string user_id = 1;
+  Event event = 3;
+}
+
+service StatService {
+  rpc DefineStat (DefineStatRequest) returns (DefineStatResponse) {}
+  rpc DeleteStat (DeleteStatRequest) returns (google.protobuf.Empty) {}
+  rpc ReadStats (ReadStatsRequest) returns (ReadStatsResponse) {}
+  rpc ReadEvents (ReadEventsRequest) returns (ReadEventsResponse) {}
+  rpc RecordEvent (RecordEventRequest) returns (google.protobuf.Empty) {}
+  rpc DeleteEvent (DeleteEventRequest) returns (google.protobuf.Empty) {}
+}
