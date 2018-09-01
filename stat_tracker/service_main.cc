@@ -15,7 +15,7 @@
 
 DEFINE_int32(port, 8080, "port to run services on");
 DEFINE_string(leveldb_path, "/dev/null",
-              "path to leveldb where paxos entity metadata will be stored");
+              "path to leveldb where data will be stored");
 
 namespace {
 
