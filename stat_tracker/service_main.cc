@@ -13,7 +13,8 @@
 #include "stat_tracker/service_impl.h"
 #include "util/status.h"
 
-DEFINE_int32(port, 8080, "port to run services on");
+DEFINE_string(listening_hostport, "127.0.0.1:8081",
+              "hostport to listen to for running services");
 DEFINE_string(leveldb_path, "/dev/null",
               "path to leveldb where data will be stored");
 
@@ -51,7 +52,7 @@ int main(int argc, char** argv) {
       absl::Hours(1e11),       absl::Hours(1e12)};
   stat_tracker::StatServiceImpl service_impl(options);
 
-  const std::string host_port = absl::StrCat("0.0.0.0:", FLAGS_port);
+  const std::string host_port = FLAGS_listening_hostport;
   LOG(INFO) << "starting server: " << host_port;
   grpc::ServerBuilder server_builder;
   server_builder.AddListeningPort(host_port,
