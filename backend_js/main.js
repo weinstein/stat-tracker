@@ -36,12 +36,14 @@ auth.registerAuthHttpHandlers(app, {
 
 var api = require('./api.js');
 auth.requireLogin(app, '/api/');
-api.registerStatServiceHttpHandlers(
-    app, {
-      urlPrefix: '/api/',
-      serviceProtoPath: flags.get('service_proto'),
-      serverHostPort: flags.get('stat_service'),
-    });
+var statService = api.newStatService({
+  serviceProtoPath: flags.get('service_proto'),
+  serverHostPort: flags.get('stat_service'),
+});
+api.registerStatServiceHttpHandlers(app, {
+  urlPrefix: '/api/',
+  statService: statService,
+});
 
 app.listen(flags.get('port'), (err) => {
   if (err) console.log('error', err);

@@ -15,6 +15,7 @@ var readStats = function(service, request, response, next) {
       {user_id: request.user.googleId},
       rpcResultToResponseBody(response, next));
 };
+exports.readStats = readStats;
 
 var readEvents = function(service, request, response, next) {
   var start = parseInt(request.query.start) || 0;
@@ -28,6 +29,7 @@ var readEvents = function(service, request, response, next) {
       },
       rpcResultToResponseBody(response, next));
 };
+exports.readEvents = readEvents;
 
 var defineStat = function(service, request, response, next) {
   service.defineStat(
@@ -37,6 +39,7 @@ var defineStat = function(service, request, response, next) {
       },
       rpcResultToResponseBody(response, next));
 };
+exports.defineStat = defineStat;
 
 var deleteStat = function(service, request, response, next) {
   service.deleteStat(
@@ -46,6 +49,7 @@ var deleteStat = function(service, request, response, next) {
       },
       rpcResultToResponseBody(response, next));
 };
+exports.deleteStat = deleteStat;
 
 var recordEvent = function(service, request, response, next) {
   var start = parseInt(request.query.start) || Date.now() / 1000;
@@ -61,6 +65,7 @@ var recordEvent = function(service, request, response, next) {
       },
       rpcResultToResponseBody(response, next));
 };
+exports.recordEvent = recordEvent;
 
 var deleteEvent = function(service, request, response, next) {
   service.deleteEvent(
@@ -71,10 +76,9 @@ var deleteEvent = function(service, request, response, next) {
       },
       rpcResultToResponseBody(response, next));
 };
+exports.deleteEvent = deleteEvent;
 
-exports.registerStatServiceHttpHandlers = function(
-    app, options) {
-  var urlPrefix = options.urlPrefix;
+var newStatService = function(options) {
   var serviceProtoPath = options.serviceProtoPath;
   var serverHostPort = options.serverHostPort;
 
@@ -89,6 +93,14 @@ exports.registerStatServiceHttpHandlers = function(
   var statTracker = protoDescriptor.stat_tracker;
   var statService = new statTracker.StatService(
       serverHostPort, grpc.credentials.createInsecure());
+  return statService;
+};
+exports.newStatService = newStatService;
+
+exports.registerStatServiceHttpHandlers = function(
+    app, options) {
+  var urlPrefix = options.urlPrefix;
+  var statService = options.statService;
 
   app.get(urlPrefix + 'read_stats', (request, response, next) => {
     readStats(statService, request, response, next); });
