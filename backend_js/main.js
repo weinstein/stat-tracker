@@ -1,10 +1,19 @@
 var flags = require('flags');
 flags.defineInteger('port', 8080, 'listening port');
+
 flags.defineString(
     'stat_service', 'localhost:8081', 'host serving StatService GRPC service.');
 flags.defineString(
     'service_proto', 'service.proto',
     'path to proto file containing StatService GRPC service definition.');
+
+flags.defineString(
+    'domain', 'http://wnste.in', 'serving domain for auth callback');
+flags.defineString('gapps_client_id', '', '');
+flags.defineString('gapps_client_secret', '', '');
+
+flags.defineString('session_secret', '', '');
+
 flags.parse();
 
 var express = require('express');
@@ -16,9 +25,23 @@ app.use((request, response, next) => {
   next();
 });
 
+var auth = require('./auth.js');
+auth.registerAuthHttpHandlers(app, {
+  clientID: flags.get('gapps_client_id'),
+  clientSecret: flags.get('gapps_client_secret'),
+  callbackDomain: flags.get('domain') + ':' + flags.get('port'),
+  urlPrefix: '/auth/google/',
+  sessionSecret: flags.get('session_secret'),
+});
+
 var api = require('./api.js');
+auth.requireLogin(app, '/api/');
 api.registerStatServiceHttpHandlers(
-    app, '/api/', flags.get('service_proto'), flags.get('stat_service'));
+    app, {
+      urlPrefix: '/api/',
+      serviceProtoPath: flags.get('service_proto'),
+      serverHostPort: flags.get('stat_service'),
+    });
 
 app.listen(flags.get('port'), (err) => {
   if (err) console.log('error', err);

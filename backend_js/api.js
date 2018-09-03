@@ -12,7 +12,7 @@ var rpcResultToResponseBody = function(response, next) {
 
 var readStats = function(service, request, response, next) {
   service.readStats(
-      {user_id: request.query.user_id},
+      {user_id: request.user.googleId},
       rpcResultToResponseBody(response, next));
 };
 
@@ -21,7 +21,7 @@ var readEvents = function(service, request, response, next) {
   var length = parseInt(request.query.length) || Number.MAX_SAFE_INTEGER;
   service.readEvents(
       {
-        user_id: request.query.user_id,
+        user_id: request.user.googleId,
         stat_id: request.query.stat_id,
         start_time: {seconds: start},
         duration: {seconds: length},
@@ -32,7 +32,7 @@ var readEvents = function(service, request, response, next) {
 var defineStat = function(service, request, response, next) {
   service.defineStat(
       {
-        user_id: request.query.user_id,
+        user_id: request.user.googleId,
         stat: {display_name: request.query.display_name},
       },
       rpcResultToResponseBody(response, next));
@@ -41,7 +41,7 @@ var defineStat = function(service, request, response, next) {
 var deleteStat = function(service, request, response, next) {
   service.deleteStat(
       {
-        user_id: request.query.user_id,
+        user_id: request.user.googleId,
         stat_id: request.query.stat_id,
       },
       rpcResultToResponseBody(response, next));
@@ -52,7 +52,7 @@ var recordEvent = function(service, request, response, next) {
   var length = parseInt(request.query.length) || 0;
   service.recordEvent(
       {
-        user_id: request.query.user_id,
+        user_id: request.user.googleId,
         event: {
           stat_id: request.query.stat_id,
           start_time: {seconds: start},
@@ -65,7 +65,7 @@ var recordEvent = function(service, request, response, next) {
 var deleteEvent = function(service, request, response, next) {
   service.deleteEvent(
       {
-        user_id: request.query.user_id,
+        user_id: request.user.googleId,
         stat_id: request.query.stat_id,
         event_id: request.query.event_id,
       },
@@ -73,7 +73,11 @@ var deleteEvent = function(service, request, response, next) {
 };
 
 exports.registerStatServiceHttpHandlers = function(
-    app, urlPrefix, serviceProtoPath, serverHostPort) {
+    app, options) {
+  var urlPrefix = options.urlPrefix;
+  var serviceProtoPath = options.serviceProtoPath;
+  var serverHostPort = options.serverHostPort;
+
   var packageDefinition = protoLoader.loadSync(serviceProtoPath, {
     keepCase: true,
     longs: String,
