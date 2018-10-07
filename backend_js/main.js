@@ -33,9 +33,9 @@ auth.registerAuthHttpHandlers(app, {
   urlPrefix: '/auth/google/',
   sessionSecret: flags.get('session_secret'),
 });
+auth.requireLogin(app, '/');
 
 var api = require('./api.js');
-auth.requireLogin(app, '/api/');
 var statService = api.newStatService({
   serviceProtoPath: flags.get('service_proto'),
   serverHostPort: flags.get('stat_service'),
@@ -44,6 +44,9 @@ api.registerStatServiceHttpHandlers(app, {
   urlPrefix: '/api/',
   statService: statService,
 });
+
+var path = require('path');
+app.use(express.static(path.join(__dirname, 'public')))
 
 app.listen(flags.get('port'), (err) => {
   if (err) console.log('error', err);

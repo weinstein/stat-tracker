@@ -1,0 +1,21 @@
+<script src="jquery-3.3.1.js"></script>
+
+<script>
+
+$(document).ready(function() {
+  $.ajax({
+    url: "/api/read_stats",
+    type: "GET",
+    crossDomain: true,
+  }).done((data) => {
+    console.log("done! " + JSON.stringify(data));
+    $("#stats").text(JSON.stringify(data));
+  }).fail((status) => {
+    console.log("fail!");
+    $("#stats").text("an error occurred");
+  });
+});
+
+</script>
+
+<div id="stats"></div>
