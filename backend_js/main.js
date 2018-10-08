@@ -20,8 +20,12 @@ var express = require('express');
 var app = express();
 
 app.use((request, response, next) => {
-  console.log(request.method + ': ' + request.originalUrl);
-  console.log('headers: ' + JSON.stringify(request.headers));
+  var pad2 = function(s) { return ('00' + s).substr(-2); };
+  var now = new Date();
+  var nowStr = pad2(now.getFullYear()) + '' + pad2(now.getMonth()) + '' +
+      pad2(now.getDate()) + ' ' + pad2(now.getHours()) + ':' +
+      pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+  console.log(nowStr + ' ' + request.method + ': ' + request.originalUrl + '\n  headers: ' + JSON.stringify(request.headers));
   next();
 });
 
