@@ -35,7 +35,9 @@ var defineStat = function(service, request, response, next) {
   service.defineStat(
       {
         user_id: request.user.googleId,
-        stat: {display_name: request.query.display_name},
+        stat: {
+          display_name: request.query.display_name,
+        },
       },
       rpcResultToResponseBody(response, next));
 };
@@ -102,6 +104,11 @@ exports.registerStatServiceHttpHandlers = function(
   var urlPrefix = options.urlPrefix;
   var statService = options.statService;
 
+  app.use(urlPrefix, (request, response, next) => {
+    response.header(
+        'Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    next();
+  });
   app.get(urlPrefix + 'read_stats', (request, response, next) => {
     readStats(statService, request, response, next); });
   app.get(urlPrefix + 'read_events', (request, response, next) => {
