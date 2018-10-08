@@ -1,31 +1,55 @@
 <head>
 <link rel="stylesheet" href="style.css">
 <script src="jquery-3.3.1.js"></script>
+<script src="client.js"></script>
 <script>
 
-$(document).ready(function() {
-  $.ajax({
-    url: "/api/read_stats",
-    type: "GET",
-    crossDomain: true,
+var appendStat = function(statId, statName) {
+  $("<div/>", {id: statId, class: "stat button"})
+      .text(statName)
+      .click(() => { recordEventNow(statId); })
+      .appendTo("#stats");
+  $("<div/>", {class: "delete button"})
+      .text("delete")
+      .click(() => { deleteStat(statId).done(reloadStats); })
+      .appendTo("#stats");
+};
+
+var reloadStats = function() {
+  readStats().fail((status) => {
+    console.log("fail!");
+    $("#stats").empty().text("an error occurred");
   }).done((data) => {
     console.log("done! " + JSON.stringify(data));
+    $("#stats").empty();
     for (var statId in data.stats) {
       var stat = data.stats[statId];
       var statName = stat.display_name;
-      $("#stats").append("<div class=\"stat\" id=\"" + statId + "\"></div>");
-      $("#" + statId).text(statName);
+      appendStat(statId, statName);
     }
-    //$("#stats").text(JSON.stringify(data));
-  }).fail((status) => {
-    console.log("fail!");
-    $("#stats").text("an error occurred");
   });
+};
+
+var addNewStat = function() {
+  var displayName = $("#display_name").val();
+  defineStat(displayName).done(() => {
+    $("#display_name").val("");
+    reloadStats();
+  });
+};
+
+$(document).ready(function() {
+  reloadStats();
+  $("#define_stat").click(addNewStat);
+  $("#reload").click(reloadStats);
 });
 
 </script>
 </head>
 
 <body>
-<div id="stats"></div>
+  <div id="stats"></div>
+  <input type="text" id="display_name"/>
+  <button id="define_stat">+</button>
+  <button id="reload">Reload</button>
 </body>
