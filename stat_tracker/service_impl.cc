@@ -2,12 +2,12 @@
 
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
-#include "google/protobuf/wrappers.pb.h"
 #include "glog/logging.h"
+#include "google/protobuf/wrappers.pb.h"
 #include "leveldb/options.h"
 #include "leveldb/slice.h"
-#include "leveldb/write_batch.h"
 #include "leveldb/status.h"
+#include "leveldb/write_batch.h"
 #include "stat_tracker/key.h"
 #include "stat_tracker/time_util.h"
 #include "storage/status_util.h"
@@ -16,7 +16,8 @@ namespace stat_tracker {
 
 namespace {
 
-std::string ToTokenString(absl::string_view prefix, const TimeRangeToken& token) {
+std::string ToTokenString(absl::string_view prefix,
+                          const TimeRangeToken& token) {
   return absl::StrCat(prefix, "-", absl::FormatDuration(token.granularity), "@",
                       token.index);
 }
@@ -152,7 +153,7 @@ grpc::Status StatServiceImpl::ReadPrefix(
   for (it->Seek(key_prefix); it->Valid() && it->key().starts_with(key_prefix);
        it->Next()) {
     VLOG(1) << "prefix read for " << absl::string_view(key_prefix) << " | "
-              << it->key().ToString() << ": " << it->value().ToString();
+            << it->key().ToString() << ": " << it->value().ToString();
     on_row(it->key(), it->value());
   }
   return storage::ToGrpcStatus(it->status());
@@ -181,8 +182,8 @@ grpc::Status StatServiceImpl::DeleteStat(grpc::ServerContext* context,
       Key::StatIndexPrefix(request->user_id(), request->stat_id());
   RETURN_IF_ERROR(DeletePrefix(index_prefix, &batch));
 
-  RETURN_IF_ERROR(storage::ToGrpcStatus(
-      leveldb_->Write(leveldb::WriteOptions(), &batch)));
+  RETURN_IF_ERROR(
+      storage::ToGrpcStatus(leveldb_->Write(leveldb::WriteOptions(), &batch)));
   LOG(INFO) << "DeleteState request: " << request->ShortDebugString();
   return grpc::Status::OK;
 }
@@ -206,6 +207,40 @@ grpc::Status StatServiceImpl::ReadStats(grpc::ServerContext* context,
   return grpc::Status::OK;
 }
 
+util::StatusOr<grpc::Status, ReadEventsResponse::Events>
+StatServiceImpl::ReadEventsForStat(const std::string& user_id,
+                                   const std::string& stat_id, absl::Time start,
+                                   absl::Time end) {
+  std::set<std::string> event_id_hits;
+  for (const TimeRangeToken& token : tokenizer_.TokenizeTimeRange(start, end)) {
+    const Key hits_prefix =
+        Key::IndexHitsPrefix(user_id, stat_id, ToTokenString("p", token));
+    RETURN_IF_ERROR(ReadPrefix(hits_prefix, [&](const leveldb::Slice& key,
+                                                const leveldb::Slice& value) {
+      event_id_hits.insert(value.ToString());
+    }));
+  }
+  for (const TimeRangeToken& token : tokenizer_.TokenizeTimePoint(start)) {
+    const Key hits_prefix =
+        Key::IndexHitsPrefix(user_id, stat_id, ToTokenString("r", token));
+    RETURN_IF_ERROR(ReadPrefix(hits_prefix, [&](const leveldb::Slice& key,
+                                                const leveldb::Slice& value) {
+      event_id_hits.insert(value.ToString());
+    }));
+  }
+
+  ReadEventsResponse::Events result;
+  for (absl::string_view event_id : event_id_hits) {
+    const Key event_key = Key::ForEvent(user_id, stat_id, event_id);
+    auto event_or =
+        ProtoGet<Event>(leveldb_.get(), leveldb::ReadOptions(), event_key);
+    RETURN_IF_ERROR(storage::ToGrpcStatus(event_or.status()));
+    result.mutable_event_by_id()->insert(
+        {std::string(event_id), std::move(event_or.ValueOrDie())});
+  }
+  return std::move(result);
+}
+
 grpc::Status StatServiceImpl::ReadEvents(grpc::ServerContext* context,
                                          const ReadEventsRequest* request,
                                          ReadEventsResponse* response) {
@@ -216,34 +251,15 @@ grpc::Status StatServiceImpl::ReadEvents(grpc::ServerContext* context,
   const absl::Time requested_end_time =
       requested_start_time + FromProtoDuration(request->duration());
 
-  std::set<std::string> event_id_hits;
-  for (const TimeRangeToken& token :
-       tokenizer_.TokenizeTimeRange(requested_start_time, requested_end_time)) {
-    const Key hits_prefix = Key::IndexHitsPrefix(
-        request->user_id(), request->stat_id(), ToTokenString("p", token));
-    RETURN_IF_ERROR(ReadPrefix(hits_prefix, [&](const leveldb::Slice& key,
-                                                const leveldb::Slice& value) {
-      event_id_hits.insert(value.ToString());
-    }));
-  }
-  for (const TimeRangeToken& token :
-       tokenizer_.TokenizeTimePoint(requested_start_time)) {
-    const Key hits_prefix = Key::IndexHitsPrefix(
-        request->user_id(), request->stat_id(), ToTokenString("r", token));
-    RETURN_IF_ERROR(ReadPrefix(hits_prefix, [&](const leveldb::Slice& key,
-                                                const leveldb::Slice& value) {
-      event_id_hits.insert(value.ToString());
-    }));
-  }
-
-  for (absl::string_view event_id : event_id_hits) {
-    const Key event_key =
-        Key::ForEvent(request->user_id(), request->stat_id(), event_id);
-    auto event_or =
-        ProtoGet<Event>(leveldb_.get(), leveldb::ReadOptions(), event_key);
-    RETURN_IF_ERROR(storage::ToGrpcStatus(event_or.status()));
-    response->mutable_events()->insert(
-        {std::string(event_id), std::move(event_or.ValueOrDie())});
+  for (const std::string& stat_id : request->stat_id()) {
+    ASSIGN_OR_RETURN(
+        ReadEventsResponse::Events events,
+        ReadEventsForStat(request->user_id(), stat_id, requested_start_time,
+                          requested_end_time));
+    if (!events.event_by_id().empty()) {
+      response->mutable_events_by_stat_id()->insert(
+          {stat_id, std::move(events)});
+    }
   }
 
   LOG(INFO) << "ReadEvents request: " << request->ShortDebugString()
@@ -257,8 +273,8 @@ grpc::Status StatServiceImpl::RecordEvent(grpc::ServerContext* context,
   ASSIGN_OR_RETURN(auto l, AcquireUserLock(*context, request->user_id()));
   leveldb::WriteBatch batch;
   RETURN_IF_ERROR(AppendEvent(request->user_id(), request->event(), &batch));
-  RETURN_IF_ERROR(storage::ToGrpcStatus(
-      leveldb_->Write(leveldb::WriteOptions(), &batch)));
+  RETURN_IF_ERROR(
+      storage::ToGrpcStatus(leveldb_->Write(leveldb::WriteOptions(), &batch)));
   LOG(INFO) << "RecordEvent request: " << request->ShortDebugString();
   return grpc::Status::OK;
 }
@@ -307,8 +323,8 @@ grpc::Status StatServiceImpl::DeleteEvent(grpc::ServerContext* context,
   leveldb::WriteBatch batch;
   RETURN_IF_ERROR(DeleteEvent(request->user_id(), request->stat_id(),
                               request->event_id(), &batch));
-  RETURN_IF_ERROR(storage::ToGrpcStatus(
-      leveldb_->Write(leveldb::WriteOptions(), &batch)));
+  RETURN_IF_ERROR(
+      storage::ToGrpcStatus(leveldb_->Write(leveldb::WriteOptions(), &batch)));
   LOG(INFO) << "DeleteEvent request: " << request->ShortDebugString();
   return grpc::Status::OK;
 }

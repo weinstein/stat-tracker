@@ -4,6 +4,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "gflags/gflags.h"
+#include "glog/logging.h"
 #include "googlemock/include/gmock/gmock.h"
 #include "googletest/include/gtest/gtest.h"
 #include "include/grpc++/grpc++.h"
@@ -20,6 +21,7 @@ namespace {
 
 using ::testing::_;
 using ::testing::AllOf;
+using ::testing::ElementsAre;
 using ::testing::Contains;
 using ::testing::Not;
 using ::testing::IsEmpty;
@@ -125,11 +127,12 @@ TEST_F(ServiceImplTest, RecordEvents) {
 
   ReadEventsRequest read_req;
   read_req.set_user_id("jack");
-  read_req.set_stat_id(foo_id);
+  read_req.add_stat_id(foo_id);
   *read_req.mutable_duration() = ToProtoDuration(absl::InfiniteDuration());
   ASSERT_GRPC_OK_AND_ASSIGN(ReadEventsResponse read_resp,
                             Call(&StatService::Stub::ReadEvents, read_req));
-  EXPECT_THAT(read_resp.events(), SizeIs(1)) << read_resp.DebugString();
+  EXPECT_THAT(read_resp.events_by_stat_id(), SizeIs(1))
+      << read_resp.DebugString();
 }
 
 TEST_F(ServiceImplTest, ReadEventsOutsideOfTimeInterval) {
@@ -150,12 +153,12 @@ TEST_F(ServiceImplTest, ReadEventsOutsideOfTimeInterval) {
 
   ReadEventsRequest read_req;
   read_req.set_user_id("jack");
-  read_req.set_stat_id(foo_id);
+  read_req.add_stat_id(foo_id);
   read_req.mutable_start_time()->set_seconds(151);
   read_req.mutable_duration()->set_seconds(1);
   ASSERT_GRPC_OK_AND_ASSIGN(ReadEventsResponse read_resp,
                             Call(&StatService::Stub::ReadEvents, read_req));
-  EXPECT_THAT(read_resp.events(), IsEmpty());
+  EXPECT_THAT(read_resp.events_by_stat_id(), IsEmpty());
 }
 
 TEST_F(ServiceImplTest, ReadEventsInTimeInterval) {
@@ -191,13 +194,16 @@ TEST_F(ServiceImplTest, ReadEventsInTimeInterval) {
 
   ReadEventsRequest read_req;
   read_req.set_user_id("jack");
-  read_req.set_stat_id(foo_id);
+  read_req.add_stat_id(foo_id);
   // Read everything overlapping [105, 145).
   read_req.mutable_start_time()->set_seconds(105);
   read_req.mutable_duration()->set_seconds(40);
   ASSERT_GRPC_OK_AND_ASSIGN(ReadEventsResponse read_resp,
                             Call(&StatService::Stub::ReadEvents, read_req));
-  EXPECT_THAT(read_resp.events(), SizeIs(4));
+  EXPECT_THAT(read_resp.events_by_stat_id(),
+              ElementsAre(Pair(
+                  foo_id, Property(&ReadEventsResponse::Events::event_by_id,
+                                   SizeIs(4)))));
 }
 
 TEST_F(ServiceImplTest, RecordManyEvents) {
@@ -223,12 +229,15 @@ TEST_F(ServiceImplTest, RecordManyEvents) {
 
   ReadEventsRequest read_req;
   read_req.set_user_id("jack");
-  read_req.set_stat_id(foo_id);
+  read_req.add_stat_id(foo_id);
   *read_req.mutable_start_time() = ToProtoTimestamp(now);
   *read_req.mutable_duration() = ToProtoDuration(absl::InfiniteDuration());
   ASSERT_GRPC_OK_AND_ASSIGN(ReadEventsResponse read_resp,
                             Call(&StatService::Stub::ReadEvents, read_req));
-  EXPECT_THAT(read_resp.events(), SizeIs(kNumEvents));
+  EXPECT_THAT(read_resp.events_by_stat_id(),
+              ElementsAre(Pair(
+                  foo_id, Property(&ReadEventsResponse::Events::event_by_id,
+                                   SizeIs(kNumEvents)))));
 }
 
 TEST_F(ServiceImplTest, DeleteStat) {
@@ -255,18 +264,21 @@ TEST_F(ServiceImplTest, DeleteStat) {
   // Read the stats. No more "foo".
   ReadStatsRequest read_stats_req;
   read_stats_req.set_user_id("jack");
-  ASSERT_GRPC_OK_AND_ASSIGN(const ReadStatsResponse read_stats_resp,
-                            Call(&StatService::Stub::ReadStats, read_stats_req));
+  ASSERT_GRPC_OK_AND_ASSIGN(
+      const ReadStatsResponse read_stats_resp,
+      Call(&StatService::Stub::ReadStats, read_stats_req));
   EXPECT_THAT(read_stats_resp.stats(), IsEmpty());
 
   // No more of foo's events either.
   ReadEventsRequest read_events_req;
   read_events_req.set_user_id("jack");
-  read_events_req.set_stat_id(foo_id);
-  *read_events_req.mutable_duration() = ToProtoDuration(absl::InfiniteDuration());
-  ASSERT_GRPC_OK_AND_ASSIGN(const ReadEventsResponse read_events_resp,
-                            Call(&StatService::Stub::ReadEvents, read_events_req));
-  EXPECT_THAT(read_events_resp.events(), IsEmpty());
+  read_events_req.add_stat_id(foo_id);
+  *read_events_req.mutable_duration() =
+      ToProtoDuration(absl::InfiniteDuration());
+  ASSERT_GRPC_OK_AND_ASSIGN(
+      const ReadEventsResponse read_events_resp,
+      Call(&StatService::Stub::ReadEvents, read_events_req));
+  EXPECT_THAT(read_events_resp.events_by_stat_id(), IsEmpty());
 }
 
 TEST_F(ServiceImplTest, DeleteEvent) {
@@ -288,14 +300,23 @@ TEST_F(ServiceImplTest, DeleteEvent) {
   // Read the two events.
   ReadEventsRequest read_events_req;
   read_events_req.set_user_id("jack");
-  read_events_req.set_stat_id(foo_id);
-  *read_events_req.mutable_duration() = ToProtoDuration(absl::InfiniteDuration());
-  ASSERT_GRPC_OK_AND_ASSIGN(const ReadEventsResponse read_events_resp,
-                            Call(&StatService::Stub::ReadEvents, read_events_req));
-  ASSERT_THAT(read_events_resp.events(), SizeIs(2));
+  read_events_req.add_stat_id(foo_id);
+  *read_events_req.mutable_duration() =
+      ToProtoDuration(absl::InfiniteDuration());
+  ASSERT_GRPC_OK_AND_ASSIGN(
+      const ReadEventsResponse read_events_resp,
+      Call(&StatService::Stub::ReadEvents, read_events_req));
+  ASSERT_THAT(read_events_resp.events_by_stat_id(),
+              ElementsAre(Pair(
+                  foo_id, Property(&ReadEventsResponse::Events::event_by_id,
+                                   SizeIs(2)))));
 
   // Delete the first one.
-  const std::string event_to_delete = read_events_resp.events().begin()->first;
+  const std::string event_to_delete = read_events_resp.events_by_stat_id()
+                                          .at(foo_id)
+                                          .event_by_id()
+                                          .begin()
+                                          ->first;
   DeleteEventRequest delete_req;
   delete_req.set_user_id("jack");
   delete_req.set_stat_id(foo_id);
@@ -306,8 +327,12 @@ TEST_F(ServiceImplTest, DeleteEvent) {
   ASSERT_GRPC_OK_AND_ASSIGN(
       const ReadEventsResponse events_after_del,
       Call(&StatService::Stub::ReadEvents, read_events_req));
-  EXPECT_THAT(events_after_del.events(),
-              AllOf(SizeIs(1), Not(Contains(Pair(event_to_delete, _)))));
+  EXPECT_THAT(
+      events_after_del.events_by_stat_id(),
+      ElementsAre(Pair(
+          foo_id, Property(&ReadEventsResponse::Events::event_by_id,
+                           AllOf(SizeIs(1),
+                                 Not(Contains(Pair(event_to_delete, _))))))));
 }
 
 TEST_F(ServiceImplTest, DeleteNonExistentEvent) {
@@ -330,3 +355,9 @@ TEST_F(ServiceImplTest, RecordEventForNonExistentStatIsError) {
 
 }  // namespace
 }  // namespace stat_tracker
+
+int main(int argc, char** argv) {
+  google::InitGoogleLogging(argv[0]);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  return RUN_ALL_TESTS();
+}

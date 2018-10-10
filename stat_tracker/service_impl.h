@@ -72,6 +72,10 @@ class StatServiceImpl final : public StatService::Service {
       const std::function<void(const leveldb::Slice& key,
                                const leveldb::Slice& value)>& on_row);
 
+  util::StatusOr<grpc::Status, ReadEventsResponse::Events> ReadEventsForStat(
+      const std::string& user_id, const std::string& stat_id, absl::Time start,
+      absl::Time end);
+
   grpc::Status DeletePrefix(const Key& key_prefix, leveldb::WriteBatch* batch);
 
   util::LockMap<std::string> user_locks_;
