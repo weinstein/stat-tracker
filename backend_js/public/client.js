@@ -5,11 +5,11 @@ var readStats = function() {
   });
 };
 
-var readEvents = function(statId, start, length) {
+var readEvents = function(statIds, start, length) {
   return $.ajax({
     url: "/api/read_events",
     data: {
-      "stat_id": statId,
+      "stat_id": statIds.join(','),
       "start": start,
       "length": length,
     },

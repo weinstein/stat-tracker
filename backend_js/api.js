@@ -23,7 +23,7 @@ var readEvents = function(service, request, response, next) {
   service.readEvents(
       {
         user_id: request.user.googleId,
-        stat_id: request.query.stat_id,
+        stat_id: request.query.stat_id.split(','),
         start_time: {seconds: start},
         duration: {seconds: length},
       },
