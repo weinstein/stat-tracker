@@ -1,0 +1,100 @@
+<head>
+
+<script src="vis.min.js"></script>
+<link rel="stylesheet" href="vis.min.css"/>
+
+<script src="jquery-3.3.1.js"></script>
+
+<script src="client.js"></script>
+<script>
+
+var statId = function() {
+  return $("#stat_id").val();
+};
+
+var start = function() {
+  var startDate = new Date($("#start").val());
+  var startSeconds = startDate.getTime() / 1000;
+  return {seconds: startSeconds};
+};
+
+var length = function() {
+  var startDate = new Date($("#start").val());
+  var endDate = new Date($("#end").val());
+  var lengthSeconds = (endDate - startDate) / 1000;
+  return {seconds: lengthSeconds};
+};
+
+var protoToMillis = function(proto) {
+  return proto.seconds * 1e3 + proto.nanos / 1e6;
+};
+
+var readStatNames = function(next) {
+  readStats().done((data) => {
+    var statIdToName = {};
+    for (var statId in data.stats) {
+      var stat = data.stats[statId];
+      statIdToName[statId] = stat.display_name;
+    }
+    next(statIdToName);
+  });
+};
+
+var addEventsToTimeline = function(statIds, statIdToName, next) {
+  readEvents(statIds, start(), length()).done((data) => {
+    console.log(JSON.stringify(data));
+    var dataSet = new vis.DataSet();
+    for (var statId in data.events_by_stat_id) {
+      var statName = statIdToName[statId];
+      var events = data.events_by_stat_id[statId];
+      for (var eventId in events.event_by_id) {
+        var eventData = events.event_by_id[eventId];
+        var startTime = eventData.start_time;
+        var startDate = new Date(protoToMillis(startTime));
+        var duration = eventData.duration;
+        var endDate = new Date(
+            protoToMillis(startTime) + protoToMillis(duration));
+        var item = {
+          id: statId + '-' + eventId,
+          start: startDate,
+          text: '' + statName,
+          content: '' + statName,
+        };
+        if (endDate - startDate > 0) {
+          item.end = endDate;
+        }
+        console.log(JSON.stringify(item));
+        dataSet.add(item);
+      }
+    }
+    var options = {};
+    $("#visualization").empty();
+    var timeline = new vis.Timeline($("#visualization")[0], dataSet, options);
+  });
+};
+
+var reloadVisualization = function() {
+  readStatNames((statIdToName) => {
+    console.log(JSON.stringify(statIdToName));
+
+    var statIds = [$("#stat").val()];
+    addEventsToTimeline(statIds, statIdToName, () => {});
+  });
+};
+
+$(document).ready(function() {
+  $("#start").val(new Date(0));
+  $("#end").val(new Date());
+  $("#reload").click(reloadVisualization);
+});
+
+</script>
+</head>
+
+<body>
+  <input id="start" type="text"/>
+  <input id="end" type="text"/>
+  <input id="stat" type="text"/>
+  <button id="reload">Reload</button>
+  <div id="visualization"></div>
+</body>
